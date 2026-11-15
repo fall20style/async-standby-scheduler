@@ -1,9 +1,11 @@
 import asyncio
+import json
 import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 import uvicorn
 from fastapi import FastAPI
+from fastapi.responses import StreamingResponse
 
 from worker_pool import (
     WORKER_POOL_SIZE,
@@ -12,10 +14,10 @@ from worker_pool import (
     start_worker_pool,
     stop_worker_pool,
     task_db,
+    task_events,
 )
 
 
-# 서버 시작 시 워커 풀 가동 및 종료 시 정리
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     workers = start_worker_pool(WORKER_POOL_SIZE)
@@ -26,7 +28,6 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 
 
-# 1. 즉시 실행 요청 API
 @app.post("/tasks/run-now")
 async def create_immediate_task(prompt: str):
     task_id = str(uuid.uuid4())[:8]
@@ -34,7 +35,6 @@ async def create_immediate_task(prompt: str):
     return {"message": "메시지 큐에 등록되었습니다.", "task_id": task_id}
 
 
-# 2. 지연 스케줄링 요청 API
 @app.post("/tasks/schedule")
 async def create_scheduled_task(prompt: str, delay_seconds: int):
     task_id = str(uuid.uuid4())[:8]
@@ -44,6 +44,7 @@ async def create_scheduled_task(prompt: str, delay_seconds: int):
         "worker": None,
         "result": None,
     }
+    task_events[task_id] = asyncio.Event()
 
     asyncio.create_task(enqueue_task_after_delay(delay_seconds, task_id, prompt))
     return {
@@ -53,13 +54,28 @@ async def create_scheduled_task(prompt: str, delay_seconds: int):
     }
 
 
-# 3. 작업 상태 및 담당 워커 조회 API
 @app.get("/tasks/{task_id}")
 async def get_task_status(task_id: str):
     return task_db.get(task_id, {"error": "존재하지 않는 작업 ID입니다."})
 
 
-# 4. 헬스체크 API
+# 폴링 없이 작업 완료 시점까지 대기했다가 결과를 푸시(Push)하는 SSE 엔드포인트
+@app.get("/tasks/{task_id}/stream")
+async def stream_task_result(task_id: str):
+    if task_id not in task_db:
+        return {"error": "존재하지 않는 작업 ID입니다."}
+
+    async def event_generator():
+        # 아직 완료되지 않았다면 워커의 event.set() 신호가 올 때까지 유휴 대기 (Polling 0회)
+        if task_db[task_id]["status"] != "COMPLETED":
+            await task_events[task_id].wait()
+
+        payload = json.dumps(task_db[task_id], ensure_ascii=False)
+        yield f"data: {payload}\n\n"
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
 @app.get("/health")
 async def health_check():
     return {"status": "ok", "active_workers": WORKER_POOL_SIZE}

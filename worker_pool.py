@@ -1,9 +1,9 @@
 import asyncio
 from datetime import datetime
 
-# 전역 변수는 None으로 선언하고, 워커 풀 시작 시 현재 이벤트 루프에 맞춰 생성
 task_queue: asyncio.Queue | None = None
 task_db: dict = {}
+task_events: dict[str, asyncio.Event] = {}  # 작업별 완료 알림 이벤트
 WORKER_POOL_SIZE = 3
 
 
@@ -21,21 +21,24 @@ async def worker(worker_name: str):
             if prompt.strip().lower() == "hello":
                 output = "HELLO WORLD"
             else:
-                output = f"'{prompt}'에 대한 요약 보고서 생성 완료"
+                output = prompt  # 날짜 포맷 등은 입력값 그대로 깔끔하게 반환
 
             task_db[task_id]["status"] = "COMPLETED"
             task_db[task_id]["result"] = output
-            print(f"[{datetime.now()}] [{worker_name}] 출력 결과 ({task_id}): {output}")
-            print(f"[{datetime.now()}] [{worker_name}] 작업 완료 ({task_id})")
+            print(f"[{datetime.now()}] [{worker_name}] 작업 완료 ({task_id}): {output}")
+
+            # 폴링 없이 대기 중인 구독자(SSE)에게 즉시 완료 이벤트 발송
+            if task_id in task_events:
+                task_events[task_id].set()
         finally:
             task_queue.task_done()
 
 
 def start_worker_pool(pool_size: int = WORKER_POOL_SIZE) -> list[asyncio.Task]:
     global task_queue
-    # 현재 실행 중인 이벤트 루프에 바인딩된 새 큐와 DB 초기화
     task_queue = asyncio.Queue()
     task_db.clear()
+    task_events.clear()
     return [
         asyncio.create_task(worker(f"Worker-{i + 1}"))
         for i in range(pool_size)
@@ -49,6 +52,7 @@ def stop_worker_pool(workers: list[asyncio.Task]):
 
 async def enqueue_task(task_id: str, prompt: str):
     task_db[task_id] = {"status": "QUEUED", "worker": None, "result": None}
+    task_events[task_id] = asyncio.Event()
     await task_queue.put((task_id, prompt))
 
 
