@@ -1,13 +1,15 @@
-# System Architecture (Event-Driven Worker Pool)
+# System Architecture — async-standby-scheduler
 
-본 문서는 외부 인프라(Redis 등) 없이 Python `asyncio` 이벤트 루프 위에서 **API 서버(`main.py`)**와 **비동기 워커 풀(`worker_pool.py`)**을 분리한 아키텍처 구조와 동작 흐름을 정의합니다.
+본 문서는 **`async-standby-scheduler`** 프로젝트의 24시간 상시 대기(Standby)형 이벤트 드리븐 워커 풀 아키텍처와 동작 흐름을 정의합니다.
 
 ---
 
 ## 1. 아키텍처 개요
 
+외부 메시지 브로커(Redis 등) 없이 Python `asyncio` 이벤트 루프 위에서 **API 서버(`main.py`)**와 **비동기 워커 풀(`worker_pool.py`)**을 분리한 구조입니다.
+
 ### 핵심 설계 원칙
-- **제로 폴링 & 이벤트 드리븐 (Zero-Polling & Event-Driven)**: 워커가 반복 조회(`sleep`)로 자원을 낭비하지 않고 `await task_queue.get()`에서 대기하다가, 메시지 삽입(`put`) 이벤트가 발생하는 즉시 깨어나 작업을 수행합니다.
+- **제로 폴링 & 24/7 상시 대기 (Zero-Polling & Always-On Standby)**: 워커가 반복 조회(`sleep`)로 CPU 자원을 낭비하지 않고 `await task_queue.get()`에서 유휴 대기하다가, 메시지 삽입(`put`) 이벤트가 발생하는 즉시 깨어나 작업을 수행합니다.
 - **워커 풀 기반 동시성 제어 (Bounded Concurrency)**: `WORKER_POOL_SIZE`만큼 미리 생성된 워커 코루틴이 작업을 순차적으로 소비하므로, 동시 요청이 폭주해도 시스템 리소스와 외부 API 호출량을 안전하게 통제할 수 있습니다.
 - **모듈 간 관심사 분리 (Separation of Concerns)**: HTTP 라우팅(`main.py`)과 큐/워커 생명주기 관리(`worker_pool.py`)를 별도 모듈로 분리해, 향후 분산 메시지 브로커(Redis, RabbitMQ)로의 확장이 용이합니다.
 
@@ -25,7 +27,7 @@ flowchart LR
     Queue[["Event-Driven Queue<br/>(asyncio.Queue)"]]
     Store[("In-Memory Store<br/>(task_db)")]
     
-    subgraph Pool ["Worker Pool (worker_pool.py)"]
+    subgraph Pool ["24/7 Standby Worker Pool (worker_pool.py)"]
         W1["Worker-1"]
         W2["Worker-2"]
         W3["Worker-3"]
@@ -54,7 +56,7 @@ sequenceDiagram
     participant Worker as Worker Pool (Worker-1~3)
     participant DB as task_db (State Store)
 
-    Note over API, Worker: 서버 시작(lifespan) 시 Worker-1~3 생성 및 await queue.get() 대기
+    Note over API, Worker: 서버 시작(lifespan) 시 Worker-1~3 생성 및 24/7 대기(await queue.get())
 
     User->>API: POST /tasks/run-now (prompt="hello")
     API->>DB: 상태 초기화 (status="QUEUED")
