@@ -21,9 +21,9 @@ py -3.12 -m venv .venv
 ```
 
 ### 3. 필수 패키지 설치
-가상환경이 활성화된 상태에서 웹 프레임워크 및 ASGI 서버만 설치합니다. (메시지 큐와 워커 풀은 파이썬 내장 `asyncio` 사용)
+서버 실행 및 자동화 테스트(`pytest`)에 필요한 라이브러리를 설치합니다.
 ```powershell
-pip install fastapi uvicorn
+pip install fastapi uvicorn pytest pytest-asyncio httpx
 ```
 
 ### 4. 서버 실행
@@ -45,7 +45,7 @@ python main.py
 
 ---
 
-## API 테스트 방법 (Swagger UI)
+## API 수동 테스트 방법 (Swagger UI)
 
 1. 브라우저를 열고 **`http://127.0.0`** 로 접속합니다.
 2. **`POST /tasks/schedule`** 또는 **`POST /tasks/run-now`**를 선택하고 **[Try it out]**을 클릭합니다.
@@ -56,14 +56,35 @@ python main.py
 
 ---
 
+## 자동화 테스트 실행 (`pytest`)
+
+`main.py` 서버를 별도로 켜지 않은 상태에서 `pytest`를 통해 9개 통합 테스트 시나리오(`TC-01` ~ `TC-09`)를 한 번에 검증할 수 있습니다.
+
+### 방법 1: 캐시 초기화 후 전체 자동 테스트 실행 (권장)
+```powershell
+.\clean_test.ps1
+```
+
+### 방법 2: pytest 직접 실행
+```powershell
+pytest -v
+```
+
+---
+
 ## 프로젝트 구조
 
 ```text
 async-standby-scheduler/
-├── .venv/               # Python 3.12 가상환경 폴더
+├── .venv/               # Python 3.12 가상환경 폴더 (Git 제외)
+├── .gitignore           # Git 추적 제외 설정 (.venv, 캐시, 로그 등)
 ├── main.py              # FastAPI 엔드포인트 및 서버 수명 주기(Lifespan) 관리
 ├── worker_pool.py       # 이벤트 기반 비동기 큐(asyncio.Queue) 및 워커 풀 모듈
+├── test_main.py         # pytest 기반 통합 자동화 테스트 코드 (TC-01 ~ TC-09)
+├── pytest.ini           # pytest 비동기 이벤트 루프 및 플러그인 설정
+├── clean_test.ps1       # 캐시 삭제 및 자동 테스트 실행 PowerShell 스크립트
 ├── ARCHITECTURE.md      # 시스템 아키텍처 및 Mermaid 다이어그램 문서
-├── README.md            # 프로젝트 설치 및 실행 가이드
-└── TEST_LOG.md          # 통합 테스트 실행 로그 분석
+├── README.md            # 프로젝트 설치, 실행 및 테스트 가이드
+├── TEST_CASE.md         # 기능별 통합 테스트 케이스 명세서
+└── TEST_LOG.md          # 자동화 테스트 실행 로그 및 트러블슈팅 분석
 ```

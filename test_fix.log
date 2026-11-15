@@ -1,0 +1,18 @@
+(.venv) PS C:\Users\fall2\work\async_runner> pytest -v
+============================================ test session starts ============================================
+platform win32 -- Python 3.12.10, pytest-9.2.0, pluggy-1.7.0 -- C:\Users\fall2\work\async_runner\.venv\Scripts\python.exe
+cachedir: .pytest_cache
+rootdir: C:\Users\fall2\work\async_runner
+configfile: pytest.ini
+plugins: asyncio-1.5.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=function, asyncio_default_test_loop_scope=function
+collected 6 items
+
+test_main.py::test_tc01_health_check PASSED                                                            [ 16%]
+test_main.py::test_tc02_and_tc07_run_now_hello_and_nonblocking PASSED                                  [ 33%]
+test_main.py::test_tc03_run_now_default_prompt PASSED                                                  [ 50%]
+test_main.py::test_tc04_and_tc05_schedule_lifecycle PASSED                                             [ 66%]
+test_main.py::test_tc06_worker_pool_concurrency PASSED                                                 [ 83%]
+test_main.py::test_tc08_and_tc09_edge_cases PASSED                                                     [100%]
+
+============================================ 6 passed in 30.85s =============================================

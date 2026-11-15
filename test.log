@@ -1,0 +1,146 @@
+(.venv) PS C:\Users\fall2\work\async_runner> .\clean_test.ps1
+1. 湲곗〈 罹먯떆 ?대뜑(__pycache__, .pytest_cache) 諛?.pyc ?뚯씪????젣?⑸땲??..
+ - .pytest_cache ??젣 ?꾨즺
+ - C:\Users\fall2\work\async_runner\__pycache__ ??젣 ?꾨즺
+
+2. 媛?곹솚寃?.venv) ?쒖꽦???뺤씤...
+
+3. 罹먯떆 ?놁씠 pytest ?먮룞???뚯뒪?몃? ?덈줈 ?쒖옉?⑸땲??..
+
+============================================ test session starts ============================================
+platform win32 -- Python 3.12.10, pytest-9.2.0, pluggy-1.7.0 -- C:\Users\fall2\work\async_runner\.venv\Scripts\python.exe
+cachedir: .pytest_cache
+rootdir: C:\Users\fall2\work\async_runner
+configfile: pytest.ini
+plugins: asyncio-1.5.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=function, asyncio_default_test_loop_scope=function
+collected 6 items
+
+test_main.py::test_tc01_health_check PASSED                                                            [ 16%]
+test_main.py::test_tc02_and_tc07_run_now_hello_and_nonblocking FAILED                                  [ 33%]
+test_main.py::test_tc03_run_now_default_prompt FAILED                                                  [ 50%]
+test_main.py::test_tc04_and_tc05_schedule_lifecycle FAILED                                             [ 66%]
+test_main.py::test_tc06_worker_pool_concurrency FAILED                                                 [ 83%]
+test_main.py::test_tc08_and_tc09_edge_cases PASSED                                                     [100%]
+
+================================================= FAILURES ==================================================
+_____________________________ test_tc02_and_tc07_run_now_hello_and_nonblocking ______________________________
+
+client = <httpx.AsyncClient object at 0x000001D8A9FA2A50>
+
+    @pytest.mark.asyncio
+    async def test_tc02_and_tc07_run_now_hello_and_nonblocking(client):
+        res = await client.post("/tasks/run-now", params={"prompt": "  HeLLo  "})
+        assert res.status_code == 200
+        task_id = res.json()["task_id"]
+
+        # TC-07: 백그라운드 작업이 도는 도중에도 /health가 블로킹 없이 즉시 응답하는지 확인
+        health_res = await client.get("/health")
+        assert health_res.status_code == 200
+
+        # 작업 완료 대기 (5초 작업 + 여유 0.5초)
+        await asyncio.sleep(5.5)
+
+        status_res = await client.get(f"/tasks/{task_id}")
+        data = status_res.json()
+>       assert data["status"] == "COMPLETED"
+E       AssertionError: assert 'QUEUED' == 'COMPLETED'
+E
+E         - COMPLETED
+E         + QUEUED
+
+test_main.py:40: AssertionError
+------------------------------------------- Captured stdout setup -------------------------------------------
+[2026-11-15 22:59:58.069632] [Worker-1] 준비 완료 (이벤트 대기 중...)
+[2026-11-15 22:59:58.069632] [Worker-2] 준비 완료 (이벤트 대기 중...)
+[2026-11-15 22:59:58.069632] [Worker-3] 준비 완료 (이벤트 대기 중...)
+_____________________________________ test_tc03_run_now_default_prompt ______________________________________
+
+client = <httpx.AsyncClient object at 0x000001D8A9FA2660>
+
+    @pytest.mark.asyncio
+    async def test_tc03_run_now_default_prompt(client):
+        res = await client.post("/tasks/run-now", params={"prompt": "WORLD"})
+        task_id = res.json()["task_id"]
+
+        await asyncio.sleep(5.5)
+
+        data = (await client.get(f"/tasks/{task_id}")).json()
+>       assert data["status"] == "COMPLETED"
+E       AssertionError: assert 'RUNNING' == 'COMPLETED'
+E
+E         - COMPLETED
+E         + RUNNING
+
+test_main.py:54: AssertionError
+------------------------------------------- Captured stdout setup -------------------------------------------
+[2026-11-15 23:00:03.744595] [Worker-1] 준비 완료 (이벤트 대기 중...)
+[2026-11-15 23:00:03.744595] [Worker-1] 작업 시작 (45abd7b3):   HeLLo
+[2026-11-15 23:00:03.744595] [Worker-2] 준비 완료 (이벤트 대기 중...)
+[2026-11-15 23:00:03.744595] [Worker-3] 준비 완료 (이벤트 대기 중...)
+------------------------------------------- Captured stdout call --------------------------------------------
+[2026-11-15 23:00:08.752296] [Worker-1] 출력 결과 (45abd7b3): HELLO WORLD
+[2026-11-15 23:00:08.752296] [Worker-1] 작업 완료 (45abd7b3)
+[2026-11-15 23:00:08.752296] [Worker-1] 작업 시작 (c18684de): WORLD
+___________________________________ test_tc04_and_tc05_schedule_lifecycle ___________________________________
+
+client = <httpx.AsyncClient object at 0x000001D8A9FD7C20>
+
+    @pytest.mark.asyncio
+    async def test_tc04_and_tc05_schedule_lifecycle(client):
+        res = await client.post("/tasks/schedule", params={"prompt": "hello", "delay_seconds": 2})
+        assert res.status_code == 200
+        task_id = res.json()["task_id"]
+
+        # 1단계: 예약 직후 (SCHEDULED 상태 확인)
+        data_scheduled = (await client.get(f"/tasks/{task_id}")).json()
+        assert data_scheduled["status"].startswith("SCHEDULED")
+        assert data_scheduled["worker"] is None
+
+        # 2단계: 2초 지연 후 작업 실행 중 (RUNNING 상태 확인)
+        await asyncio.sleep(2.5)
+        data_running = (await client.get(f"/tasks/{task_id}")).json()
+>       assert data_running["status"] == "RUNNING"
+E       AssertionError: assert 'QUEUED' == 'RUNNING'
+E
+E         - RUNNING
+E         + QUEUED
+
+test_main.py:73: AssertionError
+------------------------------------------- Captured stdout setup -------------------------------------------
+[2026-11-15 23:00:09.266208] [Worker-1] 준비 완료 (이벤트 대기 중...)
+[2026-11-15 23:00:09.266208] [Worker-2] 준비 완료 (이벤트 대기 중...)
+[2026-11-15 23:00:09.266208] [Worker-3] 준비 완료 (이벤트 대기 중...)
+_____________________________________ test_tc06_worker_pool_concurrency _____________________________________
+
+client = <httpx.AsyncClient object at 0x000001D8A9FD71A0>
+
+    @pytest.mark.asyncio
+    async def test_tc06_worker_pool_concurrency(client):
+        task_ids = []
+        # 5개 작업 연속 등록
+        for i in range(5):
+            res = await client.post("/tasks/run-now", params={"prompt": f"task_{i}"})
+            task_ids.append(res.json()["task_id"])
+
+        await asyncio.sleep(0.5)
+
+        # 3개만 RUNNING이고, 나머지 2개는 QUEUED 대기 상태여야 함
+        statuses = [(await client.get(f"/tasks/{tid}")).json()["status"] for tid in task_ids]
+>       assert statuses.count("RUNNING") == 3
+E       AssertionError: assert 0 == 3
+E        +  where 0 = <built-in method count of list object at 0x000001D8AA014A80>('RUNNING')
+E        +    where <built-in method count of list object at 0x000001D8AA014A80> = ['QUEUED', 'QUEUED', 'QUEUED', 'QUEUED', 'QUEUED'].count
+
+test_main.py:96: AssertionError
+------------------------------------------- Captured stdout setup -------------------------------------------
+[2026-11-15 23:00:11.794237] [Worker-1] 준비 완료 (이벤트 대기 중...)
+[2026-11-15 23:00:11.798928] [Worker-1] 작업 시작 (4baefd8c): hello
+[2026-11-15 23:00:11.798928] [Worker-2] 준비 완료 (이벤트 대기 중...)
+[2026-11-15 23:00:11.798928] [Worker-3] 준비 완료 (이벤트 대기 중...)
+========================================== short test summary info ==========================================
+FAILED test_main.py::test_tc02_and_tc07_run_now_hello_and_nonblocking - AssertionError: assert 'QUEUED' == 'COMPLETED'
+FAILED test_main.py::test_tc03_run_now_default_prompt - AssertionError: assert 'RUNNING' == 'COMPLETED'
+FAILED test_main.py::test_tc04_and_tc05_schedule_lifecycle - AssertionError: assert 'QUEUED' == 'RUNNING'
+FAILED test_main.py::test_tc06_worker_pool_concurrency - AssertionError: assert 0 == 3
+======================================= 4 failed, 2 passed in 16.06s ========================================
